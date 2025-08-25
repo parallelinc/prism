@@ -12,7 +12,6 @@ use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
 use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
 use Prism\Prism\ValueObjects\Messages\UserMessage;
-use Prism\Prism\ValueObjects\ToolCall;
 
 class MessageMap
 {
@@ -116,24 +115,22 @@ class MessageMap
             ];
         }
 
-        if ($message->toolCalls !== []) {
-            array_push(
-                $this->mappedMessages,
-                ...array_filter(
-                    array_map(fn (ToolCall $toolCall): ?array => is_null($toolCall->reasoningId) ? null : [
-                        'type' => 'reasoning',
-                        'id' => $toolCall->reasoningId,
-                        'summary' => $toolCall->reasoningSummary,
-                    ], $message->toolCalls)
-                ),
-                ...array_map(fn (ToolCall $toolCall): array => [
-                    'id' => $toolCall->id,
-                    'call_id' => $toolCall->resultId,
-                    'type' => 'function_call',
-                    'name' => $toolCall->name,
-                    'arguments' => json_encode($toolCall->arguments()),
-                ], $message->toolCalls)
-            );
+        foreach ($message->toolCalls as $toolCall) {
+            if (! is_null($toolCall->reasoningId)) {
+                $this->mappedMessages[] = [
+                    'type' => 'reasoning',
+                    'id' => $toolCall->reasoningId,
+                    'summary' => $toolCall->reasoningSummary,
+                ];
+            }
+
+            $this->mappedMessages[] = [
+                'id' => $toolCall->id,
+                'call_id' => $toolCall->resultId,
+                'type' => 'function_call',
+                'name' => $toolCall->name,
+                'arguments' => json_encode($toolCall->arguments()),
+            ];
         }
     }
 }
