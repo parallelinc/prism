@@ -73,7 +73,9 @@ class Structured
 
         return match ($this->mapFinishReason($data)) {
             \Prism\Prism\Enums\FinishReason::ToolCalls => $this->handleToolCalls($data, $request, $response),
-            default => $this->finalize($data, $request, $response),
+            \Prism\Prism\Enums\FinishReason::Stop => $this->finalize($data, $request, $response),
+            \Prism\Prism\Enums\FinishReason::Length => throw new PrismException('OpenAI: max tokens excceded'),
+            default => throw new PrismException('OpenAI: unknown finish reason'),
         };
     }
 
