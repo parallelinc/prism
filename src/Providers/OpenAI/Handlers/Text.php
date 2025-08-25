@@ -50,21 +50,18 @@ class Text
 
         $data = $response->json();
 
-        $functionCalls = array_filter(
-            data_get($data, 'output', []),
-            fn (array $output): bool => $output['type'] === 'function_call'
-        );
-
-        $reasonings = $request->providerTools() !== []
-            ? null
-            : array_filter(
-                data_get($data, 'output', []),
-                fn (array $output): bool => $output['type'] === 'reasoning'
-            );
-
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
-            ToolCallMap::map($functionCalls, $reasonings),
+            ToolCallMap::map(
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'function_call'
+                ),
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'reasoning'
+                ),
+            ),
         );
 
         $request->addMessage($responseMessage);
