@@ -56,18 +56,21 @@ class Structured
 
         $this->handleRefusal(data_get($data, 'output.{last}.content.0', []));
 
+        $functionCalls = array_filter(
+            data_get($data, 'output', []),
+            fn (array $output): bool => $output['type'] === 'function_call'
+        );
+
+        $reasonings = $request->providerTools() !== []
+            ? null
+            : array_filter(
+                data_get($data, 'output', []),
+                fn (array $output): bool => $output['type'] === 'reasoning'
+            );
+
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
-            ToolCallMap::map(
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'function_call'
-                ),
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'reasoning'
-                ),
-            ),
+            ToolCallMap::map($functionCalls, $reasonings),
         );
 
         $request->addMessage($responseMessage);
@@ -85,6 +88,18 @@ class Structured
      */
     protected function addStep(array $data, Request $request, ClientResponse $clientResponse, array $toolResults = [], array $structured = []): void
     {
+        $functionCalls = array_filter(
+            data_get($data, 'output', []),
+            fn (array $output): bool => $output['type'] === 'function_call'
+        );
+
+        $reasonings = $request->providerTools() !== []
+            ? null
+            : array_filter(
+                data_get($data, 'output', []),
+                fn (array $output): bool => $output['type'] === 'reasoning'
+            );
+
         $this->responseBuilder->addStep(new Step(
             text: data_get($data, 'output.{last}.content.0.text') ?? '',
             finishReason: $this->mapFinishReason($data),
@@ -103,7 +118,7 @@ class Structured
             additionalContent: [],
             systemPrompts: $request->systemPrompts(),
             structured: $structured,
-            toolCalls: ToolCallMap::map(array_filter(data_get($data, 'output', []), fn (array $output): bool => $output['type'] === 'function_call')),
+            toolCalls: ToolCallMap::map($functionCalls, $reasonings),
             toolResults: $toolResults,
         ));
     }
