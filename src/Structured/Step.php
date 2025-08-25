@@ -26,6 +26,8 @@ readonly class Step
         public array $messages,
         public array $systemPrompts,
         public array $additionalContent = [],
-        public array $structured = []
+        public array $structured = [],
+        public array $toolCalls = [],
+        public array $toolResults = [],
     ) {}
 }

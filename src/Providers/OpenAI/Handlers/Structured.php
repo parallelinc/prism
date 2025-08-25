@@ -5,24 +5,29 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
-use Prism\Prism\Enums\StructuredMode;
+use Prism\Prism\Concerns\CallsTools;
+use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Providers\OpenAI\Concerns\BuildsTools;
 use Prism\Prism\Providers\OpenAI\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
-use Prism\Prism\Providers\OpenAI\Support\StructuredModeResolver;
+use Prism\Prism\Providers\OpenAI\Maps\ToolCallMap;
+use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
 use Prism\Prism\Structured\Request;
 use Prism\Prism\Structured\Response as StructuredResponse;
 use Prism\Prism\Structured\ResponseBuilder;
 use Prism\Prism\Structured\Step;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
-use Prism\Prism\ValueObjects\Messages\SystemMessage;
+use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
 use Prism\Prism\ValueObjects\Meta;
 use Prism\Prism\ValueObjects\Usage;
 
 class Structured
 {
+    use BuildsTools;
+    use CallsTools;
     use MapsFinishReason;
     use ProcessRateLimits;
     use ValidatesResponse;
@@ -36,12 +41,7 @@ class Structured
 
     public function handle(Request $request): StructuredResponse
     {
-        $response = match ($request->mode()) {
-            StructuredMode::Auto => $this->handleAutoMode($request),
-            StructuredMode::Structured => $this->handleStructuredMode($request),
-            StructuredMode::Json => $this->handleJsonMode($request),
-
-        };
+        $response = $this->sendRequest($request);
 
         $this->validateResponse($response);
 
@@ -51,11 +51,48 @@ class Structured
 
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
+            ToolCallMap::map(
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'function_call'
+                ),
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'reasoning'
+                ),
+            ),
         );
 
         $request->addMessage($responseMessage);
 
-        $this->addStep($data, $request, $response);
+        return match ($this->mapFinishReason($data)) {
+            FinishReason::ToolCalls => $this->handleToolCalls($data, $request, $response),
+            FinishReason::Stop => $this->handleStop($data, $request, $response),
+            FinishReason::Length => throw new PrismException('OpenAI: max tokens exceeded'),
+            default => throw new PrismException('OpenAI: unknown finish reason'),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function handleToolCalls(array $data, Request $request, ClientResponse $clientResponse): StructuredResponse
+    {
+        $toolResults = $this->callTools(
+            $request->tools(),
+            ToolCallMap::map(array_filter(
+                data_get($data, 'output', []),
+                fn (array $output): bool => $output['type'] === 'function_call')
+            ),
+        );
+
+        $request->addMessage(new ToolResultMessage($toolResults));
+
+        $this->addStep($data, $request, $clientResponse, $toolResults);
+
+        if ($this->shouldContinue($request)) {
+            return $this->handle($request);
+        }
 
         return $this->responseBuilder->toResponse();
     }
@@ -63,11 +100,32 @@ class Structured
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function addStep(array $data, Request $request, ClientResponse $clientResponse): void
+    protected function handleStop(array $data, Request $request, ClientResponse $clientResponse): StructuredResponse
     {
+        $this->addStep($data, $request, $clientResponse);
+
+        return $this->responseBuilder->toResponse();
+    }
+
+    protected function shouldContinue(Request $request): bool
+    {
+        return $this->responseBuilder->steps->count() < $request->maxSteps();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function addStep(
+        array $data,
+        Request $request,
+        ClientResponse $clientResponse,
+        array $toolResults = []
+    ): void {
         $this->responseBuilder->addStep(new Step(
             text: data_get($data, 'output.{last}.content.0.text') ?? '',
             finishReason: $this->mapFinishReason($data),
+            toolCalls: ToolCallMap::map(array_filter(data_get($data, 'output', []), fn (array $output): bool => $output['type'] === 'function_call')),
+            toolResults: $toolResults,
             usage: new Usage(
                 promptTokens: data_get($data, 'usage.input_tokens', 0) - data_get($data, 'usage.input_tokens_details.cached_tokens', 0),
                 completionTokens: data_get($data, 'usage.output_tokens'),
@@ -85,11 +143,17 @@ class Structured
         ));
     }
 
-    /**
-     * @param  array{type: 'json_schema', name: string, schema: array<mixed>, strict?: bool}|array{type: 'json_object'}  $responseFormat
-     */
-    protected function sendRequest(Request $request, array $responseFormat): ClientResponse
+    protected function sendRequest(Request $request): ClientResponse
     {
+        $responseFormat = Arr::whereNotNull([
+            'type' => 'json_schema',
+            'name' => $request->schema()->name(),
+            'schema' => $request->schema()->toArray(),
+            'strict' => is_null($request->providerOptions('schema.strict'))
+                ? null
+                : $request->providerOptions('schema.strict'),
+        ]);
+
         return $this->client->post(
             'responses',
             array_merge([
@@ -103,52 +167,13 @@ class Structured
                 'previous_response_id' => $request->providerOptions('previous_response_id'),
                 'truncation' => $request->providerOptions('truncation'),
                 'reasoning' => $request->providerOptions('reasoning'),
+                'tools' => $this->buildTools($request),
+                'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
                 'text' => [
                     'format' => $responseFormat,
                 ],
             ]))
         );
-    }
-
-    protected function handleAutoMode(Request $request): ClientResponse
-    {
-        $mode = StructuredModeResolver::forModel($request->model());
-
-        return match ($mode) {
-            StructuredMode::Structured => $this->handleStructuredMode($request),
-            StructuredMode::Json => $this->handleJsonMode($request),
-            default => throw new PrismException('Could not determine structured mode for your request'),
-        };
-    }
-
-    protected function handleStructuredMode(Request $request): ClientResponse
-    {
-        $mode = StructuredModeResolver::forModel($request->model());
-
-        if ($mode !== StructuredMode::Structured) {
-            throw new PrismException(sprintf('%s model does not support structured mode', $request->model()));
-        }
-
-        /** @var array{type: 'json_schema', name: string, schema: array<mixed>, strict?: bool} $responseFormat */
-        $responseFormat = Arr::whereNotNull([
-            'type' => 'json_schema',
-            'name' => $request->schema()->name(),
-            'schema' => $request->schema()->toArray(),
-            'strict' => is_null($request->providerOptions('schema.strict'))
-                ? null
-                : $request->providerOptions('schema.strict'),
-        ]);
-
-        return $this->sendRequest($request, $responseFormat);
-    }
-
-    protected function handleJsonMode(Request $request): ClientResponse
-    {
-        $request = $this->appendMessageForJsonMode($request);
-
-        return $this->sendRequest($request, [
-            'type' => 'json_object',
-        ]);
     }
 
     /**
@@ -159,13 +184,5 @@ class Structured
         if (data_get($message, 'type') === 'refusal') {
             throw new PrismException(sprintf('OpenAI Refusal: %s', $message['refusal'] ?? 'Reason unknown.'));
         }
-    }
-
-    protected function appendMessageForJsonMode(Request $request): Request
-    {
-        return $request->addMessage(new SystemMessage(sprintf(
-            "Respond with JSON that matches the following schema: \n %s",
-            json_encode($request->schema()->toArray(), JSON_PRETTY_PRINT)
-        )));
     }
 }

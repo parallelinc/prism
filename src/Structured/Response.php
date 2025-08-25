@@ -23,6 +23,9 @@ readonly class Response
         public FinishReason $finishReason,
         public Usage $usage,
         public Meta $meta,
-        public array $additionalContent = []
+        public array $additionalContent = [],
+        public array $toolCalls = [],
+        public array $toolResults = [],
+        public Collection $messages = new Collection,
     ) {}
 }

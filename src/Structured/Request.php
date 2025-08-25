@@ -11,7 +11,10 @@ use Prism\Prism\Contracts\Message;
 use Prism\Prism\Contracts\PrismRequest;
 use Prism\Prism\Contracts\Schema;
 use Prism\Prism\Enums\StructuredMode;
+use Prism\Prism\Enums\ToolChoice;
+use Prism\Prism\Tool;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
+use Prism\Prism\ValueObjects\ProviderTool;
 
 class Request implements PrismRequest
 {
@@ -38,6 +41,10 @@ class Request implements PrismRequest
         protected Schema $schema,
         protected StructuredMode $mode,
         array $providerOptions = [],
+        protected int $maxSteps = 1,
+        protected array $tools = [],
+        protected string|ToolChoice|null $toolChoice = null,
+        protected array $providerTools = [],
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -120,5 +127,31 @@ class Request implements PrismRequest
         $this->messages = array_merge($this->messages, [$message]);
 
         return $this;
+    }
+
+    public function maxSteps(): int
+    {
+        return $this->maxSteps;
+    }
+
+    /**
+     * @return Tool[]
+     */
+    public function tools(): array
+    {
+        return $this->tools;
+    }
+
+    public function toolChoice(): string|ToolChoice|null
+    {
+        return $this->toolChoice;
+    }
+
+    /**
+     * @return array<int,ProviderTool>
+     */
+    public function providerTools(): array
+    {
+        return $this->providerTools;
     }
 }
