@@ -5,12 +5,16 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\StructuredMode;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\OpenAI\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
+use Prism\Prism\Providers\OpenAI\Maps\ToolCallMap;
+use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
+use Prism\Prism\Providers\OpenAI\Maps\ToolMap as OpenAIToolMap;
 use Prism\Prism\Providers\OpenAI\Support\StructuredModeResolver;
 use Prism\Prism\Structured\Request;
 use Prism\Prism\Structured\Response as StructuredResponse;
@@ -18,11 +22,13 @@ use Prism\Prism\Structured\ResponseBuilder;
 use Prism\Prism\Structured\Step;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
+use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
 use Prism\Prism\ValueObjects\Meta;
 use Prism\Prism\ValueObjects\Usage;
 
 class Structured
 {
+    use CallsTools;
     use MapsFinishReason;
     use ProcessRateLimits;
     use ValidatesResponse;
@@ -51,19 +57,30 @@ class Structured
 
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
+            ToolCallMap::map(
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'function_call'
+                ),
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'reasoning'
+                ),
+            ),
         );
 
         $request->addMessage($responseMessage);
 
-        $this->addStep($data, $request, $response);
-
-        return $this->responseBuilder->toResponse();
+        return match ($this->mapFinishReason($data)) {
+            \Prism\Prism\Enums\FinishReason::ToolCalls => $this->handleToolCalls($data, $request, $response),
+            default => $this->finalize($data, $request, $response),
+        };
     }
 
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function addStep(array $data, Request $request, ClientResponse $clientResponse): void
+    protected function addStep(array $data, Request $request, ClientResponse $clientResponse, array $toolResults = [], array $structured = []): void
     {
         $this->responseBuilder->addStep(new Step(
             text: data_get($data, 'output.{last}.content.0.text') ?? '',
@@ -82,6 +99,7 @@ class Structured
             messages: $request->messages(),
             additionalContent: [],
             systemPrompts: $request->systemPrompts(),
+            structured: $structured,
         ));
     }
 
@@ -103,6 +121,8 @@ class Structured
                 'previous_response_id' => $request->providerOptions('previous_response_id'),
                 'truncation' => $request->providerOptions('truncation'),
                 'reasoning' => $request->providerOptions('reasoning'),
+                'tools' => $this->buildToolsArray($request),
+                'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
                 'text' => [
                     'format' => $responseFormat,
                 ],
@@ -167,5 +187,55 @@ class Structured
             "Respond with JSON that matches the following schema: \n %s",
             json_encode($request->schema()->toArray(), JSON_PRETTY_PRINT)
         )));
+    }
+
+    /**
+     * @return array<int|string, mixed>|null
+     */
+    protected function buildToolsArray(Request $request): ?array
+    {
+        $customTools = OpenAIToolMap::Map($request->tools());
+
+        $providerTools = array_map(
+            fn (\Prism\Prism\ValueObjects\ProviderTool $tool): array => [
+                'type' => $tool->type,
+                ...$tool->options,
+            ],
+            $request->providerTools()
+        );
+
+        $combined = array_merge($providerTools, $customTools);
+
+        return $combined === [] ? null : $combined;
+    }
+
+    protected function handleToolCalls(array $data, Request $request, ClientResponse $clientResponse): StructuredResponse
+    {
+        $toolResults = $this->callTools(
+            $request->tools(),
+            ToolCallMap::map(array_filter(
+                data_get($data, 'output', []),
+                fn (array $output): bool => $output['type'] === 'function_call')
+            ),
+        );
+
+        $request->addMessage(new ToolResultMessage($toolResults));
+
+        $this->addStep($data, $request, $clientResponse, $toolResults);
+
+        if ($this->responseBuilder->steps->count() < $request->maxSteps()) {
+            return $this->handle($request);
+        }
+
+        return $this->responseBuilder->toResponse();
+    }
+
+    protected function finalize(array $data, Request $request, ClientResponse $clientResponse): StructuredResponse
+    {
+        // If structured output is included directly in parsed content, we can try decoding,
+        // but ResponseBuilder already handles JSON decoding when stop.
+        $this->addStep($data, $request, $clientResponse);
+
+        return $this->responseBuilder->toResponse();
     }
 }
