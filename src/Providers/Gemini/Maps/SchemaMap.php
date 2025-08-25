@@ -3,6 +3,7 @@
 namespace Prism\Prism\Providers\Gemini\Maps;
 
 use Prism\Prism\Contracts\Schema;
+use Prism\Prism\Schema\ArrayBackedSchema;
 use Prism\Prism\Schema\ArraySchema;
 use Prism\Prism\Schema\BooleanSchema;
 use Prism\Prism\Schema\NumberSchema;
@@ -27,7 +28,11 @@ class SchemaMap
         return array_merge([
             ...array_filter([
                 ...$schemaArray,
-                'type' => $this->mapType(),
+                // For built-in schemas, override with Gemini-supported scalar type.
+                // For array-backed schemas, preserve provided 'type' if present.
+                'type' => $this->schema instanceof ArrayBackedSchema
+                    ? ($schemaArray['type'] ?? $this->mapType())
+                    : $this->mapType(),
             ]),
         ], array_filter([
             'items' => property_exists($this->schema, 'items') ?

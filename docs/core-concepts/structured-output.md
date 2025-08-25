@@ -39,6 +39,48 @@ echo $review['summary'];  // "A mind-bending..."
 > [!TIP]
 > This is just a basic example of schema usage. Check out our [dedicated schemas guide](/core-concepts/schemas) to learn about all available schema types, nullable fields, and best practices for structuring your data.
 
+### Passing a plain PHP array as the schema
+
+If you already have a JSON Schema as a PHP array, you can pass it directly without using the Prism schema objects:
+
+```php
+use Prism\Prism\Prism;
+use Prism\Prism\Enums\Provider;
+
+$schemaArray = [
+    'type' => 'object',
+    'description' => 'A structured movie review',
+    'properties' => [
+        'title' => ['type' => 'string', 'description' => 'The movie title'],
+        'rating' => ['type' => 'string', 'description' => 'Rating out of 5 stars'],
+        'summary' => ['type' => 'string', 'description' => 'Brief review summary'],
+    ],
+    'required' => ['title', 'rating', 'summary'],
+    'additionalProperties' => false,
+];
+
+$response = Prism::structured()
+    ->using(Provider::OpenAI, 'gpt-4o')
+    ->withSchema($schemaArray, 'movie_review') // provide a name for the schema
+    ->withPrompt('Review the movie Inception')
+    ->asStructured();
+```
+
+You can also pass a compound array with a `name` and `schema` key:
+
+```php
+$response = Prism::structured()
+    ->using(Provider::OpenAI, 'gpt-4o')
+    ->withSchema([
+        'name' => 'movie_review',
+        'schema' => $schemaArray,
+    ])
+    ->withPrompt('Review the movie Inception')
+    ->asStructured();
+```
+
+If you omit the name entirely and only pass the schema array, `Prism` will default the schema name to `output`.
+
 ## Understanding Output Modes
 
 Different AI providers handle structured output in two main ways:
@@ -54,6 +96,7 @@ Different AI providers handle structured output in two main ways:
 Providers may offer additional options for structured output:
 
 ### OpenAI: Strict Mode
+
 OpenAI supports a "strict mode" for even tighter schema validation:
 
 ```php
@@ -70,6 +113,7 @@ $response = Prism::structured()
 ```
 
 ### Anthropic: Tool Calling Mode
+
 Anthropic doesn't have native structured output, but Prism provides two approaches. For more reliable JSON parsing, especially with complex content or non-English text, use tool calling mode:
 
 ```php
@@ -85,6 +129,7 @@ $response = Prism::structured()
 ```
 
 **When to use tool calling mode with Anthropic:**
+
 - Working with non-English content that may contain quotes
 - Complex JSON structures that might confuse prompt-based parsing
 - When you need the most reliable structured output possible
@@ -125,6 +170,7 @@ $rawResponse = $response->response;
 
 > [!TIP]
 > Always validate the structured data before using it in your application:
+
 ```php
 if ($response->structured === null) {
     // Handle parsing failure
@@ -140,16 +186,19 @@ if (!isset($response->structured['required_field'])) {
 Structured output supports several configuration options to fine-tune your generations:
 
 ### Model Configuration
+
 - `maxTokens` - Set the maximum number of tokens to generate
 - `temperature` - Control output randomness (provider-dependent)
 - `topP` - Alternative to temperature for controlling randomness (provider-dependent)
 
 ### Input Methods
+
 - `withPrompt` - Single prompt for generation
 - `withMessages` - Message history for more context
 - `withSystemPrompt` - System-level instructions
 
-### Request Configuration 
+### Request Configuration
+
 - `withClientOptions` - Set HTTP client options (e.g., timeouts)
 - `withClientRetry` - Configure automatic retries on failures
 - `usingProviderConfig` - Override provider configuration
