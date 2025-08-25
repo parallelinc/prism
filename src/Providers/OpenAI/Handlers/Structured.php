@@ -100,6 +100,17 @@ class Structured
             additionalContent: [],
             systemPrompts: $request->systemPrompts(),
             structured: $structured,
+            toolCalls: ToolCallMap::map(
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'function_call'
+                ),
+                array_filter(
+                    data_get($data, 'output', []),
+                    fn (array $output): bool => $output['type'] === 'reasoning'
+                ),
+            ),
+            toolResults: $toolResults,
         ));
     }
 
