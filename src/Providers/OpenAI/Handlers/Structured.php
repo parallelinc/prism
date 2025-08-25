@@ -14,7 +14,7 @@ use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolCallMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
-use Prism\Prism\Providers\OpenAI\Maps\ToolMap as OpenAIToolMap;
+use Prism\Prism\Providers\OpenAI\Maps\ToolMap;
 use Prism\Prism\Providers\OpenAI\Support\StructuredModeResolver;
 use Prism\Prism\Structured\Request;
 use Prism\Prism\Structured\Response as StructuredResponse;
@@ -24,6 +24,7 @@ use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Prism\Prism\ValueObjects\Messages\SystemMessage;
 use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
 use Prism\Prism\ValueObjects\Meta;
+use Prism\Prism\ValueObjects\ProviderTool;
 use Prism\Prism\ValueObjects\Usage;
 
 class Structured
@@ -102,16 +103,7 @@ class Structured
             additionalContent: [],
             systemPrompts: $request->systemPrompts(),
             structured: $structured,
-            toolCalls: ToolCallMap::map(
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'function_call'
-                ),
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'reasoning'
-                ),
-            ),
+            toolCalls: ToolCallMap::map(array_filter(data_get($data, 'output', []), fn (array $output): bool => $output['type'] === 'function_call')),
             toolResults: $toolResults,
         ));
     }
@@ -207,19 +199,21 @@ class Structured
      */
     protected function buildToolsArray(Request $request): ?array
     {
-        $customTools = OpenAIToolMap::Map($request->tools());
+        $tools = ToolMap::map($request->tools());
+
+        if ($request->providerTools() === []) {
+            return $tools;
+        }
 
         $providerTools = array_map(
-            fn (\Prism\Prism\ValueObjects\ProviderTool $tool): array => [
+            fn (ProviderTool $tool): array => [
                 'type' => $tool->type,
                 ...$tool->options,
             ],
             $request->providerTools()
         );
 
-        $combined = array_merge($providerTools, $customTools);
-
-        return $combined === [] ? null : $combined;
+        return array_merge($providerTools, $tools);
     }
 
     protected function handleToolCalls(array $data, Request $request, ClientResponse $clientResponse): StructuredResponse
