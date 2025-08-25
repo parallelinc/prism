@@ -55,14 +55,10 @@ class Text
             fn (array $output): bool => $output['type'] === 'function_call'
         );
 
-        // Only include reasoning items when we don't have provider tools
-        // Provider tools handle their own reasoning internally
-        $reasonings = $request->providerTools() === []
-            ? array_filter(
-                data_get($data, 'output', []),
-                fn (array $output): bool => $output['type'] === 'reasoning'
-            )
-            : [];
+        $reasonings = array_filter(
+            data_get($data, 'output', []),
+            fn (array $output): bool => $output['type'] === 'reasoning'
+        );
 
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
