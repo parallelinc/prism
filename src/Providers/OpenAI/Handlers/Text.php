@@ -55,12 +55,10 @@ class Text
             fn (array $output): bool => $output['type'] === 'function_call'
         );
 
-        $reasonings = $request->providerTools() !== []
-            ? null
-            : array_filter(
-                data_get($data, 'output', []),
-                fn (array $output): bool => $output['type'] === 'reasoning'
-            );
+        $reasonings = array_filter(
+            data_get($data, 'output', []),
+            fn (array $output): bool => $output['type'] === 'reasoning'
+        );
 
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',

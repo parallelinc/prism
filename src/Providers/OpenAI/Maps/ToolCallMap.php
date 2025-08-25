@@ -19,13 +19,24 @@ class ToolCallMap
             return [];
         }
 
-        return array_map(fn (array $toolCall): ToolCall => new ToolCall(
-            id: data_get($toolCall, 'id'),
-            resultId: data_get($toolCall, 'call_id'),
-            name: data_get($toolCall, 'name'),
-            arguments: data_get($toolCall, 'arguments'),
-            reasoningId: data_get($reasonings, '0.id'),
-            reasoningSummary: data_get($reasonings, '0.summary'),
-        ), $toolCalls);
+        // Pair each function_call with a reasoning item if available by matching index
+        $indexedReasonings = array_values($reasonings ?? []);
+
+        return array_values(array_map(
+            function (array $toolCall, int $index) use ($indexedReasonings): ToolCall {
+                $reasoning = $indexedReasonings[$index] ?? null;
+
+                return new ToolCall(
+                    id: data_get($toolCall, 'id'),
+                    resultId: data_get($toolCall, 'call_id'),
+                    name: data_get($toolCall, 'name'),
+                    arguments: data_get($toolCall, 'arguments'),
+                    reasoningId: $reasoning['id'] ?? null,
+                    reasoningSummary: $reasoning['summary'] ?? null,
+                );
+            },
+            array_values($toolCalls),
+            array_keys(array_values($toolCalls)),
+        ));
     }
 }
