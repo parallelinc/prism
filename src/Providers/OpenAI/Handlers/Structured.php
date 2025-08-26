@@ -169,7 +169,6 @@ class Structured
             'max_tool_calls' => $request->providerOptions('max_tool_calls'),
             'prompt' => $request->providerOptions('prompt'),
             'prompt_cache_key' => $request->providerOptions('prompt_cache_key'),
-            'previous_response_id' => $request->providerOptions('previous_response_id'),
             'truncation' => $request->providerOptions('truncation'),
             'reasoning' => $request->providerOptions('reasoning'),
             'tools' => $this->buildTools($request),
