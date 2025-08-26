@@ -35,7 +35,7 @@ class Tool
     /** @var array <int, string> */
     protected array $requiredParameters = [];
 
-    /** @var Closure():string|array|callable():string|array */
+    /** @var Closure():string|callable():string */
     protected $fn;
 
     /** @var null|false|Closure(Throwable,array<int|string,mixed>):string */
@@ -224,13 +224,13 @@ class Tool
      *
      * @throws PrismException|Throwable
      */
-    public function handle(...$args): string|array
+    public function handle(...$args): string
     {
         try {
             $value = call_user_func($this->fn, ...$args);
 
-            if (! is_string($value) && ! is_array($value)) {
-                throw PrismException::invalidReturnTypeInTool($this->name, new TypeError('Return value must be of type string or array'));
+            if (! is_string($value)) {
+                throw PrismException::invalidReturnTypeInTool($this->name, new TypeError('Return value must be of type string'));
             }
 
             return $value;
