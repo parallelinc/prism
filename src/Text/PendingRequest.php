@@ -11,7 +11,6 @@ use Prism\Prism\Concerns\ConfiguresGeneration;
 use Prism\Prism\Concerns\ConfiguresModels;
 use Prism\Prism\Concerns\ConfiguresProviders;
 use Prism\Prism\Concerns\ConfiguresTools;
-use Prism\Prism\Concerns\HasConversation;
 use Prism\Prism\Concerns\HasMessages;
 use Prism\Prism\Concerns\HasPrompts;
 use Prism\Prism\Concerns\HasProviderOptions;
@@ -28,7 +27,6 @@ class PendingRequest
     use ConfiguresModels;
     use ConfiguresProviders;
     use ConfiguresTools;
-    use HasConversation;
     use HasMessages;
     use HasPrompts;
     use HasProviderOptions;
@@ -109,8 +107,6 @@ class PendingRequest
             toolChoice: $this->toolChoice,
             providerOptions: $this->providerOptions,
             providerTools: $this->providerTools,
-            conversationId: $this->conversationId,
-            storeResponse: $this->shouldStore(),
         );
     }
 }

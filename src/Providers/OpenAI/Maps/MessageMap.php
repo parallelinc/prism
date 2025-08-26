@@ -59,7 +59,7 @@ class MessageMap
     protected function mapSystemMessage(SystemMessage $message): void
     {
         $this->mappedMessages[] = [
-            'role' => 'developer',
+            'role' => 'system',
             'content' => $message->content,
         ];
     }

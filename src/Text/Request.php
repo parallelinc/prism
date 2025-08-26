@@ -43,8 +43,6 @@ class Request implements PrismRequest
         protected string|ToolChoice|null $toolChoice,
         array $providerOptions = [],
         protected array $providerTools = [],
-        protected ?string $conversationId = null,
-        protected bool $storeResponse = true,
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -143,15 +141,5 @@ class Request implements PrismRequest
         $this->messages = array_merge($this->messages, [$message]);
 
         return $this;
-    }
-
-    public function conversationId(): ?string
-    {
-        return $this->conversationId;
-    }
-
-    public function storeResponse(): bool
-    {
-        return $this->storeResponse;
     }
 }
