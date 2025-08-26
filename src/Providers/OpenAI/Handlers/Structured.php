@@ -46,8 +46,6 @@ class Structured
 
     public function handle(Request $request): StructuredResponse
     {
-        Event::dispatch(new OpenAIRequestSent($request, 'structured'));
-
         $response = $this->sendRequest($request);
 
         Event::dispatch(new OpenAIResponseReceived($response, 'structured'));
@@ -176,6 +174,8 @@ class Structured
                 'format' => $responseFormat,
             ],
         ]));
+
+        Event::dispatch(new OpenAIRequestSent($request, 'structured', $payload));
 
         return $this->client->post(
             'responses',

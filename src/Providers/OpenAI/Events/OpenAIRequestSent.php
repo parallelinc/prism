@@ -13,6 +13,7 @@ class OpenAIRequestSent
 
     public function __construct(
         public PrismRequest $request,
-        public string $handlerType
+        public string $handlerType,
+        public ?array $payload = []
     ) {}
 }
