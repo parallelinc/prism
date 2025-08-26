@@ -5,6 +5,8 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -12,6 +14,8 @@ use Prism\Prism\Providers\OpenAI\Concerns\BuildsTools;
 use Prism\Prism\Providers\OpenAI\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolCallMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
@@ -43,11 +47,19 @@ class Structured
 
     public function handle(Request $request): StructuredResponse
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'structured'));
+
         $response = $this->sendRequest($request);
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'structured'));
 
         $this->validateResponse($response);
 
         $data = $response->json();
+
+        Log::info('AI response', [
+            'data' => $data,
+        ]);
 
         $this->handleRefusal(data_get($data, 'output.{last}.content.0', []));
 
@@ -152,25 +164,31 @@ class Structured
                 : $request->providerOptions('schema.strict'),
         ]);
 
+        $payload = array_merge([
+            'model' => $request->model(),
+            'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+            'max_output_tokens' => $request->maxTokens(),
+        ], Arr::whereNotNull([
+            'temperature' => $request->temperature(),
+            'top_p' => $request->topP(),
+            'metadata' => $request->providerOptions('metadata'),
+            'previous_response_id' => $request->providerOptions('previous_response_id'),
+            'truncation' => $request->providerOptions('truncation'),
+            'reasoning' => $request->providerOptions('reasoning'),
+            'tools' => $this->buildTools($request),
+            'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
+            'text' => [
+                'format' => $responseFormat,
+            ],
+        ]));
+
+        Log::debug('AI Request', [
+            'payload' => $payload,
+        ]);
+
         return $this->client->post(
             'responses',
-            array_merge([
-                'model' => $request->model(),
-                'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
-                'max_output_tokens' => $request->maxTokens(),
-            ], Arr::whereNotNull([
-                'temperature' => $request->temperature(),
-                'top_p' => $request->topP(),
-                'metadata' => $request->providerOptions('metadata'),
-                'previous_response_id' => $request->providerOptions('previous_response_id'),
-                'truncation' => $request->providerOptions('truncation'),
-                'reasoning' => $request->providerOptions('reasoning'),
-                'tools' => $this->buildTools($request),
-                'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
-                'text' => [
-                    'format' => $responseFormat,
-                ],
-            ]))
+            $payload
         );
     }
 

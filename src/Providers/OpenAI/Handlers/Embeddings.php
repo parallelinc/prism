@@ -6,10 +6,13 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Event;
 use Prism\Prism\Embeddings\Request;
 use Prism\Prism\Embeddings\Response as EmbeddingsResponse;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\ValueObjects\Embedding;
 use Prism\Prism\ValueObjects\EmbeddingsUsage;
 use Prism\Prism\ValueObjects\Meta;
@@ -23,7 +26,11 @@ class Embeddings
 
     public function handle(Request $request): EmbeddingsResponse
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'embeddings'));
+
         $response = $this->sendRequest($request);
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'embeddings'));
 
         $this->validateResponse($response);
 

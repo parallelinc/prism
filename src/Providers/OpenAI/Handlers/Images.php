@@ -6,11 +6,14 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
+use Illuminate\Support\Facades\Event;
 use Prism\Prism\Images\Request;
 use Prism\Prism\Images\Response;
 use Prism\Prism\Images\ResponseBuilder;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\Providers\OpenAI\Maps\ImageRequestMap;
 use Prism\Prism\ValueObjects\GeneratedImage;
 use Prism\Prism\ValueObjects\Meta;
@@ -25,7 +28,11 @@ class Images
 
     public function handle(Request $request): Response
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'images'));
+
         $response = $this->sendRequest($request);
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'images'));
 
         $this->validateResponse($response);
 

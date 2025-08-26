@@ -7,6 +7,7 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Event;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -14,6 +15,8 @@ use Prism\Prism\Providers\OpenAI\Concerns\BuildsTools;
 use Prism\Prism\Providers\OpenAI\Concerns\MapsFinishReason;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolCallMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
@@ -46,7 +49,11 @@ class Text
 
     public function handle(Request $request): Response
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'text'));
+
         $response = $this->sendRequest($request);
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'text'));
 
         $this->validateResponse($response);
 

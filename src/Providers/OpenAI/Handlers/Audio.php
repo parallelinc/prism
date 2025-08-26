@@ -6,12 +6,15 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Event;
 use Prism\Prism\Audio\AudioResponse;
 use Prism\Prism\Audio\SpeechToTextRequest;
 use Prism\Prism\Audio\TextResponse;
 use Prism\Prism\Audio\TextToSpeechRequest;
 use Prism\Prism\Providers\Anthropic\Concerns\ProcessesRateLimits as ConcernsProcessesRateLimits;
 use Prism\Prism\Providers\OpenAI\Concerns\ValidatesResponse;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\Providers\OpenAI\Maps\TextToSpeechRequestMapper;
 use Prism\Prism\ValueObjects\GeneratedAudio;
 use Prism\Prism\ValueObjects\Usage;
@@ -27,7 +30,11 @@ class Audio
     {
         $mapper = new TextToSpeechRequestMapper($request);
 
+        Event::dispatch(new OpenAIRequestSent($request, 'audio_text_to_speech'));
+
         $response = $this->client->post('audio/speech', $mapper->toPayload());
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'audio_text_to_speech'));
 
         if (! $response->successful()) {
             throw new \Exception('Failed to generate audio: '.$response->body());
@@ -45,6 +52,8 @@ class Audio
 
     public function handleSpeechToText(SpeechToTextRequest $request): TextResponse
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'audio_speech_to_text'));
+
         $response = $this
             ->client
             ->attach(
@@ -60,6 +69,8 @@ class Audio
                 'response_format' => $request->providerOptions('response_format') ?? null,
                 'temperature' => $request->providerOptions('temperature') ?? null,
             ]));
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'audio_speech_to_text'));
 
         if (json_validate($response->body())) {
             $data = $response->json();

@@ -8,6 +8,7 @@ use Generator;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\ChunkType;
@@ -17,6 +18,8 @@ use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Exceptions\PrismRateLimitedException;
 use Prism\Prism\Providers\OpenAI\Concerns\BuildsTools;
 use Prism\Prism\Providers\OpenAI\Concerns\ProcessRateLimits;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIRequestSent;
+use Prism\Prism\Providers\OpenAI\Events\OpenAIResponseReceived;
 use Prism\Prism\Providers\OpenAI\Maps\FinishReasonMap;
 use Prism\Prism\Providers\OpenAI\Maps\MessageMap;
 use Prism\Prism\Providers\OpenAI\Maps\ToolChoiceMap;
@@ -43,7 +46,11 @@ class Stream
      */
     public function handle(Request $request): Generator
     {
+        Event::dispatch(new OpenAIRequestSent($request, 'stream'));
+
         $response = $this->sendRequest($request);
+
+        Event::dispatch(new OpenAIResponseReceived($response, 'stream'));
 
         yield from $this->processStream($response, $request);
     }
@@ -243,7 +250,11 @@ class Stream
         $depth++;
 
         if ($depth < $request->maxSteps()) {
+            Event::dispatch(new OpenAIRequestSent($request, 'stream'));
+
             $nextResponse = $this->sendRequest($request);
+
+            Event::dispatch(new OpenAIResponseReceived($nextResponse, 'stream'));
 
             yield from $this->processStream($nextResponse, $request, $depth);
         }
