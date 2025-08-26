@@ -6,7 +6,6 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -56,10 +55,6 @@ class Structured
         $this->validateResponse($response);
 
         $data = $response->json();
-
-        Log::info('AI response', [
-            'data' => $data,
-        ]);
 
         $this->handleRefusal(data_get($data, 'output.{last}.content.0', []));
 
@@ -181,10 +176,6 @@ class Structured
                 'format' => $responseFormat,
             ],
         ]));
-
-        Log::debug('AI Request', [
-            'payload' => $payload,
-        ]);
 
         return $this->client->post(
             'responses',
