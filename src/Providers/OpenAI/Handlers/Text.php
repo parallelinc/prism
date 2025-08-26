@@ -37,6 +37,8 @@ class Text
 
     protected ResponseBuilder $responseBuilder;
 
+    protected array $toolCallTypes = ['function_call', 'web_search_call'];
+
     public function __construct(protected PendingRequest $client)
     {
         $this->responseBuilder = new ResponseBuilder;
@@ -52,16 +54,7 @@ class Text
 
         $responseMessage = new AssistantMessage(
             data_get($data, 'output.{last}.content.0.text') ?? '',
-            ToolCallMap::map(
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'function_call'
-                ),
-                array_filter(
-                    data_get($data, 'output', []),
-                    fn (array $output): bool => $output['type'] === 'reasoning'
-                ),
-            ),
+            ToolCallMap::map(data_get($data, 'output', []))
         );
 
         $request->addMessage($responseMessage);
@@ -144,10 +137,15 @@ class Text
         ClientResponse $clientResponse,
         array $toolResults = []
     ): void {
+        $toolCalls = ToolCallMap::map(array_filter(
+            data_get($data, 'output', []),
+            fn (array $output): bool => in_array($output['type'], $this->toolCallTypes))
+        );
+
         $this->responseBuilder->addStep(new Step(
             text: data_get($data, 'output.{last}.content.0.text') ?? '',
             finishReason: $this->mapFinishReason($data),
-            toolCalls: ToolCallMap::map(array_filter(data_get($data, 'output', []), fn (array $output): bool => $output['type'] === 'function_call')),
+            toolCalls: $toolCalls,
             toolResults: $toolResults,
             usage: new Usage(
                 promptTokens: data_get($data, 'usage.input_tokens', 0) - data_get($data, 'usage.input_tokens_details.cached_tokens', 0),

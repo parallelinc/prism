@@ -12,11 +12,13 @@ class ToolCall
      */
     public function __construct(
         public readonly string $id,
-        public readonly string $name,
-        protected string|array $arguments,
+        public readonly ?string $name = null,
+        protected string|array|null $arguments = [],
         public readonly ?string $resultId = null,
         public readonly ?string $reasoningId = null,
         public readonly ?array $reasoningSummary = null,
+        public readonly ?string $status = null,
+        public readonly ?string $webSearchId = null,
     ) {}
 
     /**

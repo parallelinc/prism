@@ -52,6 +52,8 @@ readonly class ResponseBuilder
      */
     protected function decodeObject(string $responseText): array
     {
+        $responseText = str_replace(["\n", "\r"], '', $responseText);
+
         try {
             return json_decode($responseText, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
