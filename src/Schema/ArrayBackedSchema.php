@@ -37,22 +37,10 @@ class ArrayBackedSchema implements SchemaContract
             }
         }
 
-        $this->removeTitleKey($schema);
+        if (isset($schema['title'])) {
+            unset($schema['title']);
+        }
 
         return $schema;
-    }
-
-    protected function removeTitleKey(array &$array)
-    {
-        foreach ($array as $key => &$value) {
-            // If the current key is "title", unset it
-            if ($key === 'title') {
-                unset($array[$key]);
-            }
-            // If the value is an array, recurse into it
-            elseif (is_array($value)) {
-                $this->removeTitleKey($value);
-            }
-        }
     }
 }
