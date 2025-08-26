@@ -11,6 +11,8 @@ class SystemMessage implements Message
 {
     use HasProviderOptions;
 
+    public bool $send = true;
+
     public function __construct(
         public readonly string $content
     ) {}

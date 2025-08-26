@@ -12,6 +12,8 @@ class AssistantMessage implements Message
 {
     use HasProviderOptions;
 
+    public bool $send = true;
+
     /**
      * @param  ToolCall[]  $toolCalls
      * @param  array<string,mixed>  $additionalContent

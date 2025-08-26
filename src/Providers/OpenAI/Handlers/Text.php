@@ -87,9 +87,14 @@ class Text
             ),
         );
 
-        $request->addMessage(new ToolResultMessage($toolResults));
+        $toolResultMessage = new ToolResultMessage($toolResults);
+        $request->addMessage($toolResultMessage);
 
         $this->addStep($data, $request, $clientResponse, $toolResults);
+
+        // For the next turn, only send the new tool results; prior history is persisted via conversation
+        $this->markAllMessagesNotSend($request);
+        $toolResultMessage->send = true;
 
         if ($this->shouldContinue($request)) {
             return $this->handle($request);
@@ -105,6 +110,9 @@ class Text
     {
         $this->addStep($data, $request, $clientResponse);
 
+        // Prevent resending the entire history on the next external turn
+        $this->markAllMessagesNotSend($request);
+
         return $this->responseBuilder->toResponse();
     }
 
@@ -115,13 +123,18 @@ class Text
 
     protected function sendRequest(Request $request): ClientResponse
     {
+        $this->ensureConversation($request);
+
+        $usingConversation = (bool) $request->conversationId();
+
         return $this->client->post(
             'responses',
             array_merge([
                 'model' => $request->model(),
-                'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+                'input' => (new MessageMap($request->messages(), $request->systemPrompts(), $usingConversation))(),
                 'max_output_tokens' => $request->maxTokens(),
             ], Arr::whereNotNull([
+                'conversation' => $request->conversationId(),
                 'temperature' => $request->temperature(),
                 'top_p' => $request->topP(),
                 'metadata' => $request->providerOptions('metadata'),
@@ -163,10 +176,50 @@ class Text
                 id: data_get($data, 'id'),
                 model: data_get($data, 'model'),
                 rateLimits: $this->processRateLimits($clientResponse),
+                conversationId: $request->conversationId(),
             ),
             messages: $request->messages(),
             additionalContent: [],
             systemPrompts: $request->systemPrompts(),
         ));
+    }
+
+    protected function ensureConversation(Request $request): void
+    {
+        if ($request->conversationId()) {
+            return;
+        }
+
+        $provided = $request->providerOptions('conversation');
+        if (is_string($provided) && $provided !== '') {
+            $request->setConversationId($provided);
+
+            return;
+        }
+
+        if ($provided === true) {
+            $conversationResponse = $this->client->post('conversations', Arr::whereNotNull([
+                'metadata' => $request->providerOptions('metadata'),
+            ]));
+            $request->setConversationId((string) data_get($conversationResponse->json(), 'id'));
+        }
+    }
+
+    protected function markAllMessagesNotSend(Request $request): void
+    {
+        if (! $request->conversationId()) {
+            return;
+        }
+
+        foreach ($request->messages() as $message) {
+            if (property_exists($message, 'send')) {
+                $message->send = false;
+            }
+        }
+        foreach ($request->systemPrompts() as $message) {
+            if (property_exists($message, 'send')) {
+                $message->send = false;
+            }
+        }
     }
 }

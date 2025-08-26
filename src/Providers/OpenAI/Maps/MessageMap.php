@@ -24,7 +24,8 @@ class MessageMap
      */
     public function __construct(
         protected array $messages,
-        protected array $systemPrompts
+        protected array $systemPrompts,
+        protected bool $usingConversation = false
     ) {
         $this->messages = array_merge(
             $this->systemPrompts,
@@ -47,6 +48,9 @@ class MessageMap
 
     protected function mapMessage(Message $message): void
     {
+        if (! $this->shouldSend($message)) {
+            return;
+        }
         match ($message::class) {
             UserMessage::class => $this->mapUserMessage($message),
             AssistantMessage::class => $this->mapAssistantMessage($message),
@@ -56,12 +60,28 @@ class MessageMap
         };
     }
 
+    protected function shouldSend(Message $message): bool
+    {
+        if (! $this->usingConversation) {
+            return true;
+        }
+
+        // All Prism message value objects include a public `$send` flag; default true
+        // but we guard in case of custom messages implementing the interface.
+        return property_exists($message, 'send') ? (bool) $message->send : true;
+    }
+
     protected function mapSystemMessage(SystemMessage $message): void
     {
         $this->mappedMessages[] = [
             'role' => 'system',
             'content' => $message->content,
         ];
+
+        if ($this->usingConversation) {
+            // System prompts are persistent once in a conversation; avoid resending
+            $message->send = false;
+        }
     }
 
     protected function mapToolResultMessage(ToolResultMessage $message): void
@@ -72,6 +92,11 @@ class MessageMap
                 'call_id' => $toolResult->toolCallResultId,
                 'output' => $toolResult->result,
             ];
+        }
+
+        if ($this->usingConversation) {
+            // Tool outputs are ephemeral per turn; avoid resending after mapping
+            $message->send = false;
         }
     }
 
@@ -86,6 +111,11 @@ class MessageMap
             ],
             ...$message->additionalAttributes,
         ];
+
+        if ($this->usingConversation) {
+            // After mapping, ensure we don't resend the same user message in a conversation
+            $message->send = false;
+        }
     }
 
     /**
@@ -138,6 +168,11 @@ class MessageMap
                     'arguments' => json_encode($toolCall->arguments()),
                 ];
             }
+        }
+
+        if ($this->usingConversation) {
+            // After mapping, do not resend prior assistant content in a conversation
+            $message->send = false;
         }
     }
 }

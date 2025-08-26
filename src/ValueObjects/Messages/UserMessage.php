@@ -17,6 +17,8 @@ class UserMessage implements Message
 {
     use HasProviderOptions;
 
+    public bool $send = true;
+
     /**
      * @param  array<int, Text|Image|Document|Media>  $additionalContent
      * @param  array<string, mixed>  $additionalAttributes

@@ -12,6 +12,8 @@ class ToolResultMessage implements Message
 {
     use HasProviderOptions;
 
+    public bool $send = true;
+
     /**
      * @param  ToolResult[]  $toolResults
      */
