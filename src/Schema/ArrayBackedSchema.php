@@ -37,6 +37,10 @@ class ArrayBackedSchema implements SchemaContract
             }
         }
 
+        if (isset($schema['title'])) {
+            unset($schema['title']);
+        }
+
         return $schema;
     }
 }
