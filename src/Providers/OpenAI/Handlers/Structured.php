@@ -176,7 +176,7 @@ class Structured
             'tool_choice' => ToolChoiceMap::map($request->toolChoice()),
             'text' => [
                 'format' => $responseFormat,
-                'verbosity' => $request->providerOptions('verbosity'),
+                'verbosity' => $request->providerOptions('text.verbosity'),
             ],
         ]));
 
