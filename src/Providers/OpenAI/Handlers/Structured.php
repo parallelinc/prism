@@ -39,6 +39,10 @@ class Structured
 
     protected array $toolCallTypes = ['function_call', 'web_search_call'];
 
+    protected ?string $conversationId = null;
+
+    protected int $lastSentMessageCount = 0;
+
     public function __construct(protected PendingRequest $client)
     {
         $this->responseBuilder = new ResponseBuilder;
@@ -46,6 +50,13 @@ class Structured
 
     public function handle(Request $request): StructuredResponse
     {
+        // Create conversation if not provided
+        if ($request->conversationId() === null && $request->maxSteps() > 1) {
+            $this->conversationId = $this->createConversation($request);
+        } else {
+            $this->conversationId = $request->conversationId();
+        }
+
         $response = $this->sendRequest($request);
 
         Event::dispatch(new OpenAIResponseReceived($response, 'structured'));
@@ -139,6 +150,7 @@ class Structured
                 id: data_get($data, 'id'),
                 model: data_get($data, 'model'),
                 rateLimits: $this->processRateLimits($clientResponse),
+                conversationId: $this->conversationId,
             ),
             messages: $request->messages(),
             additionalContent: [],
@@ -159,7 +171,6 @@ class Structured
 
         $payload = array_merge([
             'model' => $request->model(),
-            'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
             'max_output_tokens' => $request->maxTokens(),
         ], Arr::whereNotNull([
             'temperature' => $request->temperature(),
@@ -177,7 +188,18 @@ class Structured
                 'format' => $responseFormat,
                 'verbosity' => $request->providerOptions('text.verbosity'),
             ],
+            'store' => $request->storeResponse(),
         ]));
+
+        // If we have a conversation ID, use it instead of full message history
+        if ($this->conversationId !== null) {
+            $payload['conversation'] = $this->conversationId;
+            // Only send the most recent messages that haven't been sent to the conversation yet
+            $payload['input'] = $this->getUnsentMessages($request);
+        } else {
+            // Send full message history for single-turn conversations
+            $payload['input'] = (new MessageMap($request->messages(), $request->systemPrompts()))();
+        }
 
         Event::dispatch(new OpenAIRequestSent($request, 'structured', $payload));
 
@@ -185,6 +207,47 @@ class Structured
             'responses',
             $payload
         );
+    }
+
+    /**
+     * Create a new conversation and return the conversation ID
+     */
+    protected function createConversation(Request $request): string
+    {
+        $metadata = $request->providerOptions('metadata');
+
+        $response = $this->client->post('conversations', $metadata ? ['metadata' => $metadata] : []);
+
+        return data_get($response->json(), 'id');
+    }
+
+    /**
+     * Get only the messages that haven't been sent to the conversation yet.
+     * For multi-turn conversations, this will typically be just the latest user message
+     * and any tool results from the current turn.
+     */
+    protected function getUnsentMessages(Request $request): array
+    {
+        $messages = $request->messages();
+        $systemPrompts = $request->systemPrompts();
+
+        // For the initial request, we need to include system prompts
+        if ($this->lastSentMessageCount === 0) {
+            // Track how many messages we're sending
+            $this->lastSentMessageCount = count($messages);
+
+            return (new MessageMap($messages, $systemPrompts))();
+        }
+
+        // For subsequent requests, only send new messages
+        // This handles multi-step responses correctly by tracking the count
+        // of messages we last sent to the API
+        $newMessages = array_slice($messages, $this->lastSentMessageCount);
+
+        // Update the count for next time
+        $this->lastSentMessageCount = count($messages);
+
+        return (new MessageMap($newMessages, []))();
     }
 
     /**

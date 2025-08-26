@@ -45,6 +45,8 @@ class Request implements PrismRequest
         protected array $tools = [],
         protected string|ToolChoice|null $toolChoice = null,
         protected array $providerTools = [],
+        protected ?string $conversationId = null,
+        protected bool $storeResponse = true,
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -153,5 +155,15 @@ class Request implements PrismRequest
     public function providerTools(): array
     {
         return $this->providerTools;
+    }
+
+    public function conversationId(): ?string
+    {
+        return $this->conversationId;
+    }
+
+    public function storeResponse(): bool
+    {
+        return $this->storeResponse;
     }
 }
