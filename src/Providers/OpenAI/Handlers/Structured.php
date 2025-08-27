@@ -6,6 +6,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Prism\Prism\Concerns\CallsTools;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
@@ -195,10 +196,19 @@ class Structured
 
         Event::dispatch(new OpenAIRequestSent($request, 'structured', $payload));
 
-        return $this->client->post(
+        $response = $this->client->post(
             'responses',
             $payload
         );
+
+        Log::info('HTTP request made:', [
+            'status' => $response->status(),
+            'headers' => $response->headers(),     // Response headers
+            'body' => $response->body(),        // Full response body
+            'json' => $response->json(),        // Decoded JSON response (if applicable)
+        ]);
+
+        return $response;
     }
 
     /**
