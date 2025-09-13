@@ -38,6 +38,7 @@ class Request implements PrismRequest
         protected Schema $schema,
         protected StructuredMode $mode,
         array $providerOptions = [],
+        protected ?string $conversationId = null
     ) {
         $this->providerOptions = $providerOptions;
     }
@@ -120,5 +121,10 @@ class Request implements PrismRequest
         $this->messages = array_merge($this->messages, [$message]);
 
         return $this;
+    }
+
+    public function conversationId(): ?string
+    {
+        return $this->conversationId;
     }
 }

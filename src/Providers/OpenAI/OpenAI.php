@@ -136,6 +136,11 @@ class OpenAI extends Provider
         };
     }
 
+    public function createConversation(): string
+    {
+        return $this->client()->post('conversations')->json('id', null);
+    }
+
     /**
      * @param  array<string, mixed>  $options
      * @param  array<mixed>  $retry
