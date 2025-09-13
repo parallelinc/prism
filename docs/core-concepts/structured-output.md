@@ -42,6 +42,48 @@ echo $review['summary'];  // "A mind-bending..."
 > [!TIP]
 > This is just a basic example of schema usage. Check out our [dedicated schemas guide](/core-concepts/schemas) to learn about all available schema types, nullable fields, and best practices for structuring your data.
 
+### Passing a plain PHP array as the schema
+
+If you already have a JSON Schema as a PHP array, you can pass it directly without using the Prism schema objects:
+
+```php
+use Prism\Prism\Prism;
+use Prism\Prism\Enums\Provider;
+
+$schemaArray = [
+    'type' => 'object',
+    'description' => 'A structured movie review',
+    'properties' => [
+        'title' => ['type' => 'string', 'description' => 'The movie title'],
+        'rating' => ['type' => 'string', 'description' => 'Rating out of 5 stars'],
+        'summary' => ['type' => 'string', 'description' => 'Brief review summary'],
+    ],
+    'required' => ['title', 'rating', 'summary'],
+    'additionalProperties' => false,
+];
+
+$response = Prism::structured()
+    ->using(Provider::OpenAI, 'gpt-4o')
+    ->withSchema($schemaArray, 'movie_review') // provide a name for the schema
+    ->withPrompt('Review the movie Inception')
+    ->asStructured();
+```
+
+You can also pass a compound array with a `name` and `schema` key:
+
+```php
+$response = Prism::structured()
+    ->using(Provider::OpenAI, 'gpt-4o')
+    ->withSchema([
+        'name' => 'movie_review',
+        'schema' => $schemaArray,
+    ])
+    ->withPrompt('Review the movie Inception')
+    ->asStructured();
+```
+
+If you omit the name entirely and only pass the schema array, `Prism` will default the schema name to `output`.
+
 ## Understanding Output Modes
 
 Different AI providers handle structured output in two main ways:
