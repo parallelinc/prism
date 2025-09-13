@@ -116,6 +116,7 @@ class Structured
                 'previous_response_id' => $request->providerOptions('previous_response_id'),
                 'truncation' => $request->providerOptions('truncation'),
                 'reasoning' => $request->providerOptions('reasoning'),
+                'include' => $request->providerOptions('include'),
                 'text' => [
                     'format' => $responseFormat,
                 ],
