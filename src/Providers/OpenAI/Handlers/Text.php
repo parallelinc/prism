@@ -8,6 +8,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
 use Prism\Prism\Concerns\CallsTools;
+use Prism\Prism\Contracts\Message;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\OpenAI\Concerns\BuildsTools;
@@ -42,6 +43,8 @@ class Text
 
     /** @var ?MessagePartWithCitations[] */
     protected ?array $citations = null;
+
+    protected ?Message $messageToSend = null;
 
     public function __construct(protected PendingRequest $client)
     {
@@ -92,7 +95,9 @@ class Text
             ),
         );
 
-        $request->addMessage(new ToolResultMessage($toolResults));
+        $this->messageToSend = new ToolResultMessage($toolResults);
+
+        $request->addMessage($this->messageToSend);
 
         $this->addStep($data, $request, $clientResponse, $toolResults);
 
@@ -120,12 +125,17 @@ class Text
 
     protected function sendRequest(Request $request): ClientResponse
     {
+        $input = $this->messageToSend instanceof \Prism\Prism\Contracts\Message
+            ? (new MessageMap([$this->messageToSend], []))()
+            : (new MessageMap($request->messages(), $request->systemPrompts()))();
+
         return $this->client->post(
             'responses',
             array_merge([
                 'model' => $request->model(),
-                'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
+                'input' => $input,
                 'max_output_tokens' => $request->maxTokens(),
+                'conversation' => $request->conversationId(),
             ], Arr::whereNotNull([
                 'temperature' => $request->temperature(),
                 'top_p' => $request->topP(),
@@ -169,6 +179,7 @@ class Text
             systemPrompts: $request->systemPrompts(),
             additionalContent: Arr::whereNotNull([
                 'citations' => $this->citations,
+                'conversation_id' => $request->conversationId(),
             ]),
         ));
     }

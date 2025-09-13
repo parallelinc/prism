@@ -64,6 +64,11 @@ abstract class Provider
         throw PrismException::unsupportedProviderAction(__METHOD__, class_basename($this));
     }
 
+    public function createConversation(): ?string
+    {
+        throw PrismException::unsupportedProviderAction('createConversation', class_basename($this));
+    }
+
     public function handleRequestException(string $model, RequestException $e): never
     {
         match ($e->response->getStatusCode()) {

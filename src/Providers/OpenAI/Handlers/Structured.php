@@ -5,6 +5,7 @@ namespace Prism\Prism\Providers\OpenAI\Handlers;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as ClientResponse;
 use Illuminate\Support\Arr;
+use Prism\Prism\Contracts\Message;
 use Prism\Prism\Enums\StructuredMode;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Providers\OpenAI\Concerns\ExtractsCitations;
@@ -30,6 +31,8 @@ class Structured
     use ValidatesResponse;
 
     protected ResponseBuilder $responseBuilder;
+
+    protected ?Message $messageToSend = null;
 
     public function __construct(protected PendingRequest $client)
     {
@@ -85,6 +88,7 @@ class Structured
             systemPrompts: $request->systemPrompts(),
             additionalContent: Arr::whereNotNull([
                 'citations' => $this->extractCitations($data),
+                'conversation_id' => $request->conversationId(),
             ]),
         ));
     }
@@ -94,12 +98,17 @@ class Structured
      */
     protected function sendRequest(Request $request, array $responseFormat): ClientResponse
     {
+        $this->messageToSend instanceof \Prism\Prism\Contracts\Message
+            ? (new MessageMap([$this->messageToSend], []))()
+            : (new MessageMap($request->messages(), $request->systemPrompts()))();
+
         return $this->client->post(
             'responses',
             array_merge([
                 'model' => $request->model(),
                 'input' => (new MessageMap($request->messages(), $request->systemPrompts()))(),
                 'max_output_tokens' => $request->maxTokens(),
+                'conversation' => $request->conversationId(),
             ], Arr::whereNotNull([
                 'temperature' => $request->temperature(),
                 'top_p' => $request->topP(),

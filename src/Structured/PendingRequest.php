@@ -9,6 +9,7 @@ use Prism\Prism\Concerns\ConfiguresClient;
 use Prism\Prism\Concerns\ConfiguresModels;
 use Prism\Prism\Concerns\ConfiguresProviders;
 use Prism\Prism\Concerns\ConfiguresStructuredOutput;
+use Prism\Prism\Concerns\HasConversation;
 use Prism\Prism\Concerns\HasMessages;
 use Prism\Prism\Concerns\HasPrompts;
 use Prism\Prism\Concerns\HasProviderOptions;
@@ -22,6 +23,7 @@ class PendingRequest
     use ConfiguresModels;
     use ConfiguresProviders;
     use ConfiguresStructuredOutput;
+    use HasConversation;
     use HasMessages;
     use HasPrompts;
     use HasProviderOptions;
@@ -76,6 +78,7 @@ class PendingRequest
             schema: $this->schema,
             mode: $this->structuredMode,
             providerOptions: $this->providerOptions,
+            conversationId: $this->conversationId,
         );
     }
 }
